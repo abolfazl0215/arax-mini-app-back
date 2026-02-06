@@ -3,6 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const OpenAI = require("openai");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,6 +16,22 @@ app.use(express.json());
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// ==================== TELEGRAM BOT CONFIGURATION ====================
+
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const MINI_APP_URL = process.env.MINI_APP_URL;
+const SUPPORT_USERNAME =
+  process.env.SUPPORT_USERNAME || "araks_support";
+
+// ایجاد ربات تلگرام (فقط اگر BOT_TOKEN موجود باشد)
+let bot;
+if (BOT_TOKEN) {
+  bot = new TelegramBot(BOT_TOKEN, { polling: true });
+  console.log("🤖 Telegram Bot started successfully!");
+} else {
+  console.log("⚠️  BOT_TOKEN not found. Telegram bot is disabled.");
+}
 
 // MongoDB Connection
 mongoose
@@ -32,6 +49,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: true,
       index: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now(),
     },
     imageUrl: {
       type: String,
@@ -68,13 +89,299 @@ const userSchema = new mongoose.Schema(
 
 const User = mongoose.model("AraxUser", userSchema);
 
-// ==================== ROUTES ====================
+// ==================== TELEGRAM BOT HANDLERS ====================
+
+if (bot) {
+  // متن پیام خوش‌آمدگویی
+  const WELCOME_MESSAGE = `
+🌟 به ربات رسمی آراکس گروپ خوش آمدید! 🇦🇲
+
+ما در زمینه ارائه خدمات اقامت و مهاجرت به ارمنستان فعالیت می‌کنیم.
+
+📱 برای دسترسی به تمام خدمات ما، مینی اپ را باز کنید
+💬 یا می‌توانید مستقیماً با پشتیبانی ما در ارتباط باشید
+
+خدمات ما:
+✅ دریافت کارت اقامت
+🏠 پیداکردن خانه برای اجاره
+🏨 رزرو هتل و سوییت
+✈️ ترانسفر فرودگاهی
+💱 صرافی و اکسچنج
+🎓 ثبت نام دانشگاه و مدارس
+📅 اخذ وقت سفارت
+
+لطفاً یکی از گزینه‌های زیر را انتخاب کنید:
+`;
+
+  // کیبورد اینلاین با دکمه‌ها
+  const getWelcomeKeyboard = () => {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: "🚀 باز کردن مینی اپ",
+            web_app: { url: MINI_APP_URL },
+          },
+        ],
+        [
+          {
+            text: "💬 ارتباط با پشتیبانی",
+            url: `https://t.me/${SUPPORT_USERNAME}`,
+          },
+        ],
+        [
+          {
+            text: "📞 تماس تلفنی",
+            callback_data: "contact_phone",
+          },
+          {
+            text: "📧 ایمیل",
+            callback_data: "contact_email",
+          },
+        ],
+      ],
+    };
+  };
+
+  // تابع ثبت کاربر در دیتابیس
+  async function registerUserFromBot(userData) {
+    try {
+      const fullName =
+        `${userData.first_name || ""} ${userData.last_name || ""}`.trim();
+
+      let user = await User.findOne({
+        telegramId: userData.id.toString(),
+      });
+
+      if (user) {
+        user.userName = userData.username || user.userName;
+        user.fullName = fullName || user.fullName;
+        await user.save();
+        console.log(`✅ User ${userData.id} updated from bot`);
+      } else {
+        user = new User({
+          telegramId: userData.id.toString(),
+          userName: userData.username || "",
+          fullName: fullName || "",
+          imageUrl: "",
+          chat: [],
+        });
+        await user.save();
+        console.log(`✅ New user ${userData.id} created from bot`);
+      }
+
+      return user;
+    } catch (error) {
+      console.error(
+        "❌ Error registering user from bot:",
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  // دستور /start
+  bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+
+    console.log(`📩 /start command received from user ${user.id}`);
+
+    // ثبت کاربر در دیتابیس
+    await registerUserFromBot(user);
+
+    // ارسال پیام خوش‌آمدگویی
+    try {
+      await bot.sendMessage(chatId, WELCOME_MESSAGE, {
+        reply_markup: getWelcomeKeyboard(),
+        parse_mode: "Markdown",
+      });
+    } catch (error) {
+      console.error(
+        "❌ Error sending welcome message:",
+        error.message,
+      );
+    }
+  });
+
+  // دستور /help
+  bot.onText(/\/help/, async (msg) => {
+    const chatId = msg.chat.id;
+
+    const helpMessage = `
+📚 راهنمای استفاده از ربات:
+
+/start - شروع مجدد ربات
+/help - نمایش این راهنما
+/services - لیست خدمات ما
+/contact - اطلاعات تماس
+
+🔹 برای استفاده از مینی اپ، روی دکمه "باز کردن مینی اپ" کلیک کنید.
+🔹 برای ارتباط مستقیم با پشتیبانی، روی دکمه "ارتباط با پشتیبانی" کلیک کنید.
+
+در صورت نیاز به کمک، با پشتیبانی ما تماس بگیرید.
+    `;
+
+    await bot.sendMessage(chatId, helpMessage, {
+      reply_markup: getWelcomeKeyboard(),
+    });
+  });
+
+  // دستور /services
+  bot.onText(/\/services/, async (msg) => {
+    const chatId = msg.chat.id;
+
+    const servicesMessage = `
+🎯 خدمات آراکس گروپ:
+
+1️⃣ دریافت کارت اقامت
+   • اقامت کاری
+   • اقامت تحصیلی
+   • اقامت خانوادگی
+   • اقامت سرمایه‌گذاری
+
+2️⃣ پیداکردن خانه برای اجاره
+   • مشاوره رایگان
+   • بازدید از خانه‌ها
+   • تنظیم قرارداد
+
+3️⃣ رزرو هتل و سوییت روزانه
+   • بهترین قیمت‌ها
+   • تایید آنی
+
+4️⃣ ترانسفر فرودگاهی
+   • راننده مجرب
+   • خودروهای مدل بالا
+
+5️⃣ صرافی و اکسچنج
+   • بهترین نرخ روز
+   • تراکنش سریع و امن
+
+6️⃣ ثبت نام دانشگاه و مدارس
+   • راهنمایی کامل
+   • پیگیری پذیرش
+
+7️⃣ اخذ وقت سفارت
+   • دریافت سریع وقت
+   • مشاوره مدارک
+
+برای اطلاعات بیشتر، مینی اپ را باز کنید یا با پشتیبانی تماس بگیرید.
+    `;
+
+    await bot.sendMessage(chatId, servicesMessage, {
+      reply_markup: getWelcomeKeyboard(),
+    });
+  });
+
+  // دستور /contact
+  bot.onText(/\/contact/, async (msg) => {
+    const chatId = msg.chat.id;
+
+    const contactMessage = `
+📞 اطلاعات تماس:
+
+📱 تلگرام: @${SUPPORT_USERNAME}
+📧 ایمیل: info@araksgroup.com
+☎️ تلفن: +374 12 345 6789
+
+📍 آدرس دفتر:
+Fuchik 32/2, Yerevan, Armenia
+
+🕐 ساعات کاری:
+دوشنبه تا شنبه
+10:00 صبح - 6:00 عصر (به وقت ایروان)
+
+برای ارتباط سریع‌تر، از دکمه‌های زیر استفاده کنید:
+    `;
+
+    await bot.sendMessage(chatId, contactMessage, {
+      reply_markup: getWelcomeKeyboard(),
+    });
+  });
+
+  // مدیریت هر نوع پیام متنی
+  bot.on("message", async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+
+    // اگر پیام یک دستور نبود
+    if (text && !text.startsWith("/")) {
+      console.log(
+        `📩 Message received from user ${msg.from.id}: ${text}`,
+      );
+
+      // ثبت کاربر در دیتابیس
+      await registerUserFromBot(msg.from);
+
+      // ارسال پیام راهنما
+      const responseMessage = `
+دوست عزیز، از تماس شما با آراکس گروپ متشکریم! 🙏
+
+برای دریافت بهترین خدمات، لطفاً از یکی از گزینه‌های زیر استفاده کنید:
+
+🚀 مینی اپ ما را باز کنید تا به تمام خدمات دسترسی داشته باشید
+💬 یا مستقیماً با پشتیبانی ما گفتگو کنید
+
+ما آماده‌ایم تا در هر مرحله از مهاجرت به ارمنستان همراه شما باشیم! 🇦🇲
+      `;
+
+      await bot.sendMessage(chatId, responseMessage, {
+        reply_markup: getWelcomeKeyboard(),
+      });
+    }
+  });
+
+  // مدیریت کال‌بک‌ها (دکمه‌های اینلاین)
+  bot.on("callback_query", async (callbackQuery) => {
+    const chatId = callbackQuery.message.chat.id;
+    const data = callbackQuery.data;
+
+    console.log(
+      `🔘 Callback received: ${data} from user ${callbackQuery.from.id}`,
+    );
+
+    switch (data) {
+      case "contact_phone":
+        await bot.answerCallbackQuery(callbackQuery.id);
+        await bot.sendMessage(
+          chatId,
+          `📞 تماس تلفنی:\n\n+374 12 345 6789\n\nپاسخگویی 24/7\n\nبرای تماس، می‌توانید از تلگرام یا تماس مستقیم استفاده کنید.`,
+        );
+        break;
+
+      case "contact_email":
+        await bot.answerCallbackQuery(callbackQuery.id);
+        await bot.sendMessage(
+          chatId,
+          `📧 ایمیل:\n\ninfo@araksgroup.com\n\nپاسخ طی 24 ساعت\n\nلطفاً سوالات خود را به صورت کامل ارسال کنید تا بهترین راهنمایی را دریافت کنید.`,
+        );
+        break;
+
+      default:
+        await bot.answerCallbackQuery(callbackQuery.id, {
+          text: "گزینه نامعتبر!",
+        });
+    }
+  });
+
+  // مدیریت خطاهای ربات
+  bot.on("polling_error", (error) => {
+    console.error("❌ Bot polling error:", error.message);
+  });
+
+  bot.on("error", (error) => {
+    console.error("❌ Bot error:", error.message);
+  });
+}
+
+// ==================== API ROUTES ====================
 
 // Health Check
 app.get("/", (req, res) => {
   res.json({
     message: "Telegram Chat Bot API is running!",
     status: "OK",
+    botStatus: bot ? "Active" : "Disabled",
     timestamp: new Date().toISOString(),
   });
 });
@@ -318,7 +625,7 @@ async function processAIResponse(
   }
 }
 
-// Delete Chat History Route (اختیاری - برای پاک کردن تاریخچه چت)
+// Delete Chat History Route
 app.delete("/api/messages", async (req, res) => {
   try {
     const { telegramId } = req.body;
@@ -358,7 +665,7 @@ app.delete("/api/messages", async (req, res) => {
   }
 });
 
-// Get User Info Route (اختیاری)
+// Get User Info Route
 app.get("/api/user/:telegramId", async (req, res) => {
   try {
     const { telegramId } = req.params;
@@ -414,8 +721,32 @@ app.use((err, req, res, next) => {
   });
 });
 
+// مدیریت سیگنال‌های خروج
+process.on("SIGINT", () => {
+  console.log("\n🛑 Server is shutting down...");
+  if (bot) {
+    bot.stopPolling();
+  }
+  mongoose.connection.close();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  console.log("\n🛑 Server is shutting down...");
+  if (bot) {
+    bot.stopPolling();
+  }
+  mongoose.connection.close();
+  process.exit(0);
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/`);
+  if (bot) {
+    console.log(
+      `✅ Telegram Bot is active and listening for messages!`,
+    );
+  }
 });
