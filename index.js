@@ -2018,6 +2018,9 @@ app.post("/api/admin/packages/update/:id", async (req, res) => {
     const { id } = req.params;
     const packageData = req.body.packageData;
 
+    console.log({ id });
+    console.log({ packageData });
+
     const pkg = await Package.findByIdAndUpdate(
       id,
       {
@@ -2026,6 +2029,8 @@ app.post("/api/admin/packages/update/:id", async (req, res) => {
       },
       { new: true },
     );
+
+    console.log({ pkg });
 
     if (!pkg) {
       return res.status(404).json({
