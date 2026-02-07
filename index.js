@@ -182,7 +182,261 @@ const broadcastSchema = new mongoose.Schema({
 
 const Broadcast = mongoose.model("BroadcastArax", broadcastSchema);
 
+// بعد از Broadcast Schema اضافه کن:
+
+// Package Schema - برای پکیج‌های اقامت
+const packageSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true,
+  },
+  titleEn: {
+    type: String,
+    default: "",
+  },
+  duration: {
+    type: String,
+    required: true,
+  },
+  price: {
+    type: Number,
+    required: true,
+  },
+  priceText: {
+    type: String,
+    default: "",
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  icon: {
+    type: String,
+    default: "Building2",
+  },
+  features: [String],
+  popular: {
+    type: Boolean,
+    default: false,
+  },
+  gradient: {
+    type: String,
+    default: "from-blue-500 to-purple-500",
+  },
+  longDescription: {
+    type: String,
+    default: "",
+  },
+  benefits: [String],
+  requirements: [String],
+  process: [String],
+  contactRequired: {
+    type: Boolean,
+    default: false,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  order: {
+    type: Number,
+    default: 0,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const Package = mongoose.model("PackageArax", packageSchema);
+
+// Discount Campaign Schema - برای کمپین‌های تخفیف
+const discountCampaignSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+    default: "",
+  },
+  discountType: {
+    type: String,
+    enum: ["percentage", "fixed"],
+    default: "percentage",
+  },
+  discountValue: {
+    type: Number,
+    required: true,
+  },
+  packages: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PackageArax",
+    },
+  ],
+  startDate: {
+    type: Date,
+    required: true,
+  },
+  endDate: {
+    type: Date,
+    required: true,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  notificationSent: {
+    type: Boolean,
+    default: false,
+  },
+  notificationMessage: {
+    type: String,
+    default: "",
+  },
+  createdBy: {
+    type: String,
+    default: "",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const DiscountCampaign = mongoose.model(
+  "DiscountCampaignArax",
+  discountCampaignSchema,
+);
+
 // ==================== HELPER FUNCTIONS ====================
+
+// بعد از updateActiveUsersCount() اضافه کن:
+
+// تابع برای محاسبه قیمت با تخفیف
+async function calculateDiscountedPrice(packageId, originalPrice) {
+  try {
+    const now = new Date();
+
+    const activeCampaign = await DiscountCampaign.findOne({
+      packages: packageId,
+      isActive: true,
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    }).sort({ createdAt: -1 });
+
+    if (!activeCampaign) {
+      return {
+        hasDiscount: false,
+        originalPrice,
+        discountedPrice: originalPrice,
+        discountPercentage: 0,
+        campaignEndDate: null,
+      };
+    }
+
+    let discountedPrice = originalPrice;
+    let discountPercentage = 0;
+
+    if (activeCampaign.discountType === "percentage") {
+      discountPercentage = activeCampaign.discountValue;
+      discountedPrice =
+        originalPrice -
+        (originalPrice * activeCampaign.discountValue) / 100;
+    } else {
+      discountedPrice = originalPrice - activeCampaign.discountValue;
+      discountPercentage =
+        ((originalPrice - discountedPrice) / originalPrice) * 100;
+    }
+
+    return {
+      hasDiscount: true,
+      originalPrice,
+      discountedPrice: Math.max(0, Math.round(discountedPrice)),
+      discountPercentage: Math.round(discountPercentage),
+      campaignEndDate: activeCampaign.endDate,
+      campaignName: activeCampaign.name,
+    };
+  } catch (error) {
+    console.error("Error calculating discount:", error);
+    return {
+      hasDiscount: false,
+      originalPrice,
+      discountedPrice: originalPrice,
+      discountPercentage: 0,
+      campaignEndDate: null,
+    };
+  }
+}
+
+// تابع برای ارسال نوتیفیکیشن شروع تخفیف
+async function sendDiscountNotification(campaignId) {
+  try {
+    const campaign =
+      await DiscountCampaign.findById(campaignId).populate(
+        "packages",
+      );
+
+    if (!campaign || campaign.notificationSent || !bot) {
+      return;
+    }
+
+    const users = await User.find({ isActive: true });
+
+    let message = campaign.notificationMessage;
+
+    if (!message) {
+      const packageNames = campaign.packages
+        .map((p) => p.title)
+        .join("، ");
+      message = `🎉 کمپین تخفیف ویژه! 🎉\n\n`;
+      message += `${campaign.name}\n\n`;
+      message += `📦 پکیج‌ها: ${packageNames}\n`;
+      message += `💰 تخفیف: ${campaign.discountValue}${campaign.discountType === "percentage" ? "%" : "$"}\n`;
+      message += `⏰ تا تاریخ: ${new Date(campaign.endDate).toLocaleDateString("fa-IR")}\n\n`;
+      message += `برای مشاهده و استفاده از تخفیف، مینی اپ را باز کنید! 🚀`;
+    }
+
+    let successCount = 0;
+
+    for (const user of users) {
+      try {
+        await bot.sendMessage(user.telegramId, message, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "🛍️ مشاهده پکیج‌ها",
+                  web_app: { url: MINI_APP_URL },
+                },
+              ],
+            ],
+          },
+        });
+        successCount++;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } catch (error) {
+        console.error(
+          `Failed to send discount notification to ${user.telegramId}`,
+        );
+      }
+    }
+
+    campaign.notificationSent = true;
+    await campaign.save();
+
+    console.log(
+      `✅ Discount notification sent to ${successCount} users`,
+    );
+  } catch (error) {
+    console.error("Error sending discount notification:", error);
+  }
+}
 
 // تابع برای بروزرسانی آمار روزانه
 async function updateDailyAnalytics(type, increment = 1) {
@@ -1581,6 +1835,589 @@ app.post("/api/admin/export/users", async (req, res) => {
     });
   }
 });
+
+// بعد از app.get("/api/user/:telegramId", ...) اضافه کن:
+
+// ==================== PACKAGES API ROUTES ====================
+
+// دریافت لیست تمام پکیج‌های فعال
+app.get("/api/packages", async (req, res) => {
+  try {
+    const packages = await Package.find({ isActive: true }).sort({
+      order: 1,
+      createdAt: -1,
+    });
+
+    // محاسبه تخفیف برای هر پکیج
+    const packagesWithDiscount = await Promise.all(
+      packages.map(async (pkg) => {
+        const discount = await calculateDiscountedPrice(
+          pkg._id,
+          pkg.price,
+        );
+
+        return {
+          id: pkg._id.toString(),
+          title: pkg.title,
+          titleEn: pkg.titleEn,
+          duration: pkg.duration,
+          price: pkg.price,
+          priceText: pkg.priceText,
+          description: pkg.description,
+          icon: pkg.icon,
+          features: pkg.features,
+          popular: pkg.popular,
+          gradient: pkg.gradient,
+          longDescription: pkg.longDescription,
+          benefits: pkg.benefits,
+          requirements: pkg.requirements,
+          process: pkg.process,
+          contactRequired: pkg.contactRequired,
+          ...discount,
+        };
+      }),
+    );
+
+    return res.status(200).json({
+      success: true,
+      packages: packagesWithDiscount,
+    });
+  } catch (error) {
+    console.error("Error in get packages:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// دریافت جزئیات یک پکیج
+app.get("/api/packages/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pkg = await Package.findById(id);
+
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    const discount = await calculateDiscountedPrice(
+      pkg._id,
+      pkg.price,
+    );
+
+    return res.status(200).json({
+      success: true,
+      package: {
+        id: pkg._id.toString(),
+        title: pkg.title,
+        titleEn: pkg.titleEn,
+        duration: pkg.duration,
+        price: pkg.price,
+        priceText: pkg.priceText,
+        description: pkg.description,
+        icon: pkg.icon,
+        features: pkg.features,
+        popular: pkg.popular,
+        gradient: pkg.gradient,
+        longDescription: pkg.longDescription,
+        benefits: pkg.benefits,
+        requirements: pkg.requirements,
+        process: pkg.process,
+        contactRequired: pkg.contactRequired,
+        ...discount,
+      },
+    });
+  } catch (error) {
+    console.error("Error in get package:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// بعد از app.post("/api/admin/export/users", ...) اضافه کن:
+
+// ==================== ADMIN PACKAGES ROUTES ====================
+
+// دریافت لیست تمام پکیج‌ها (برای ادمین)
+app.post("/api/admin/packages", async (req, res) => {
+  try {
+    const packages = await Package.find().sort({
+      order: 1,
+      createdAt: -1,
+    });
+
+    return res.status(200).json({
+      success: true,
+      packages: packages.map((pkg) => ({
+        id: pkg._id.toString(),
+        title: pkg.title,
+        titleEn: pkg.titleEn,
+        duration: pkg.duration,
+        price: pkg.price,
+        priceText: pkg.priceText,
+        description: pkg.description,
+        icon: pkg.icon,
+        features: pkg.features,
+        popular: pkg.popular,
+        gradient: pkg.gradient,
+        isActive: pkg.isActive,
+        order: pkg.order,
+        createdAt: pkg.createdAt,
+        updatedAt: pkg.updatedAt,
+      })),
+    });
+  } catch (error) {
+    console.error("Error in admin/packages:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ایجاد پکیج جدید
+app.post("/api/admin/packages/create", async (req, res) => {
+  try {
+    const packageData = req.body.packageData;
+
+    const newPackage = new Package({
+      ...packageData,
+      updatedAt: new Date(),
+    });
+
+    await newPackage.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Package created successfully",
+      package: newPackage,
+    });
+  } catch (error) {
+    console.error("Error in create package:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ویرایش پکیج
+app.post("/api/admin/packages/update/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const packageData = req.body.packageData;
+
+    const pkg = await Package.findByIdAndUpdate(
+      id,
+      {
+        ...packageData,
+        updatedAt: new Date(),
+      },
+      { new: true },
+    );
+
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Package updated successfully",
+      package: pkg,
+    });
+  } catch (error) {
+    console.error("Error in update package:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// حذف پکیج
+app.delete("/api/admin/packages/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pkg = await Package.findByIdAndDelete(id);
+
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Package deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error in delete package:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// تغییر وضعیت فعال/غیرفعال پکیج
+app.post("/api/admin/packages/toggle/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pkg = await Package.findById(id);
+
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    pkg.isActive = !pkg.isActive;
+    pkg.updatedAt = new Date();
+    await pkg.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Package ${pkg.isActive ? "activated" : "deactivated"} successfully`,
+      package: pkg,
+    });
+  } catch (error) {
+    console.error("Error in toggle package:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ==================== ADMIN DISCOUNT CAMPAIGNS ROUTES ====================
+
+// دریافت لیست تمام کمپین‌ها
+app.post("/api/admin/campaigns", async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.body;
+
+    const campaigns = await DiscountCampaign.find()
+      .populate("packages", "title price")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const totalCampaigns = await DiscountCampaign.countDocuments();
+
+    const now = new Date();
+    const campaignsWithStatus = campaigns.map((campaign) => {
+      let status = "upcoming";
+      if (now >= campaign.startDate && now <= campaign.endDate) {
+        status = campaign.isActive ? "active" : "paused";
+      } else if (now > campaign.endDate) {
+        status = "expired";
+      }
+
+      return {
+        id: campaign._id.toString(),
+        name: campaign.name,
+        description: campaign.description,
+        discountType: campaign.discountType,
+        discountValue: campaign.discountValue,
+        packages: campaign.packages,
+        startDate: campaign.startDate,
+        endDate: campaign.endDate,
+        isActive: campaign.isActive,
+        notificationSent: campaign.notificationSent,
+        createdAt: campaign.createdAt,
+        status,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      campaigns: campaignsWithStatus,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCampaigns / limit),
+        totalCampaigns,
+        limit,
+      },
+    });
+  } catch (error) {
+    console.error("Error in admin/campaigns:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ایجاد کمپین تخفیف جدید
+app.post("/api/admin/campaigns/create", async (req, res) => {
+  try {
+    const { campaignData, adminTelegramId, sendNotification } =
+      req.body;
+
+    const newCampaign = new DiscountCampaign({
+      ...campaignData,
+      createdBy: adminTelegramId || "",
+    });
+
+    await newCampaign.save();
+
+    // ارسال نوتیفیکیشن به کاربران (اختیاری)
+    if (
+      sendNotification &&
+      new Date(campaignData.startDate) <= new Date()
+    ) {
+      setTimeout(() => {
+        sendDiscountNotification(newCampaign._id);
+      }, 1000);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Campaign created successfully",
+      campaign: newCampaign,
+    });
+  } catch (error) {
+    console.error("Error in create campaign:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ویرایش کمپین
+app.post("/api/admin/campaigns/update/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { campaignData } = req.body;
+
+    const campaign = await DiscountCampaign.findByIdAndUpdate(
+      id,
+      campaignData,
+      { new: true },
+    );
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: "Campaign not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Campaign updated successfully",
+      campaign,
+    });
+  } catch (error) {
+    console.error("Error in update campaign:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// حذف کمپین
+app.delete("/api/admin/campaigns/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const campaign = await DiscountCampaign.findByIdAndDelete(id);
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: "Campaign not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Campaign deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error in delete campaign:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// فعال/غیرفعال کردن کمپین
+app.post("/api/admin/campaigns/toggle/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const campaign = await DiscountCampaign.findById(id);
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: "Campaign not found",
+      });
+    }
+
+    campaign.isActive = !campaign.isActive;
+    await campaign.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Campaign ${campaign.isActive ? "activated" : "deactivated"} successfully`,
+      campaign,
+    });
+  } catch (error) {
+    console.error("Error in toggle campaign:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ارسال مجدد نوتیفیکیشن کمپین
+app.post(
+  "/api/admin/campaigns/resend-notification/:id",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const campaign = await DiscountCampaign.findById(id);
+
+      if (!campaign) {
+        return res.status(404).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
+
+      // Reset notification flag
+      campaign.notificationSent = false;
+      await campaign.save();
+
+      // Send notification
+      setTimeout(() => {
+        sendDiscountNotification(id);
+      }, 500);
+
+      return res.status(200).json({
+        success: true,
+        message: "Notification will be sent shortly",
+      });
+    } catch (error) {
+      console.error("Error in resend notification:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+// قبل از app.listen() اضافه کن:
+
+// ==================== INITIAL DATA MIGRATION ====================
+
+async function initializePackages() {
+  try {
+    const count = await Package.countDocuments();
+
+    if (count === 0) {
+      console.log("📦 Initializing packages...");
+
+      const initialPackages = [
+        {
+          title: "اقامت از طریق ثبت شرکت",
+          titleEn: "Residence through Company Registration",
+          duration: "1 ساله",
+          price: 900,
+          description:
+            "دریافت اقامت یک ساله از طریق ثبت شرکت در ارمنستان",
+          icon: "Building2",
+          features: [
+            "ثبت شرکت رسمی",
+            "اقامت 1 ساله",
+            "افتتاح حساب بانکی",
+            "پشتیبانی کامل",
+          ],
+          popular: false,
+          gradient: "from-emerald-500 to-teal-500",
+          order: 1,
+        },
+        {
+          title: "اقامت 5 ساله",
+          titleEn: "5-Year Residence",
+          duration: "5 ساله",
+          price: 1500,
+          description: "اقامت بلند مدت با امکانات ویژه",
+          icon: "Building2",
+          features: [
+            "اقامت 5 ساله",
+            "قابل تمدید",
+            "حساب بانکی رایگان",
+            "مشاوره حقوقی",
+          ],
+          popular: true,
+          gradient: "from-indigo-500 to-purple-500",
+          order: 2,
+        },
+        {
+          title: "اقامت تحصیلی",
+          titleEn: "Student Residence",
+          duration: "تحصیلی",
+          price: 800,
+          description: "برای دانشجویان و محققین",
+          icon: "GraduationCap",
+          features: [
+            "پذیرش تحصیلی",
+            "اقامت دانشجویی",
+            "تخفیف ویژه",
+            "پشتیبانی آموزشی",
+          ],
+          popular: false,
+          gradient: "from-cyan-500 to-blue-500",
+          order: 3,
+        },
+      ];
+
+      await Package.insertMany(initialPackages);
+      console.log("✅ Initial packages created");
+    }
+  } catch (error) {
+    console.error("Error initializing packages:", error);
+  }
+}
+
+// فراخوانی تابع
+// initializePackages();
 
 // ==================== ERROR HANDLERS ====================
 
