@@ -1296,27 +1296,27 @@ app.post("/api/admin/sendMessage", async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
-      telegramId: targetTelegramId.toString(),
-    });
+    // const user = await User.findOne({
+    //   telegramId: targetTelegramId.toString(),
+    // });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    // if (!user) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "User not found",
+    //   });
+    // }
 
     if (bot) {
       try {
         await bot.sendMessage(targetTelegramId, message);
 
-        user.chat.push({
-          message: message,
-          time: new Date(),
-          from: "admin",
-        });
-        await user.save();
+        // user.chat.push({
+        //   message: message,
+        //   time: new Date(),
+        //   from: "admin",
+        // });
+        // await user.save();
         await updateDailyAnalytics("adminMessage");
 
         return res.status(200).json({
