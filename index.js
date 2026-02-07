@@ -533,7 +533,7 @@ function isAdmin(req, res, next) {
 
 if (bot) {
   const WELCOME_MESSAGE = `
-🌟 به ربات رسمی آراد گروپ خوش آمدید! 🇦🇲
+🌟 به ربات رسمی آراد  خوش آمدید! 🇦🇲
 
 ما در زمینه ارائه خدمات اقامت و مهاجرت به ارمنستان فعالیت می‌کنیم.
 
@@ -678,7 +678,7 @@ if (bot) {
     await updateActiveUsersCount();
 
     const servicesMessage = `
-🎯 خدمات آراد گروپ:
+🎯 خدمات آراد :
 
 1️⃣ دریافت کارت اقامت
    • اقامت کاری
@@ -760,7 +760,7 @@ Fuchik 32/2, Yerevan, Armenia
       await updateActiveUsersCount();
 
       const responseMessage = `
-دوست عزیز، از تماس شما با آراد گروپ متشکریم! 🙏
+دوست عزیز، از تماس شما با آراد  متشکریم! 🙏
 
 برای دریافت بهترین خدمات، لطفاً از یکی از گزینه‌های زیر استفاده کنید:
 
