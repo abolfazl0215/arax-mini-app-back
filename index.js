@@ -760,7 +760,7 @@ Fuchik 32/2, Yerevan, Armenia
       await updateActiveUsersCount();
 
       const responseMessage = `
-دوست عزیز، از تماس شما با آراد  متشکریم! 🙏
+دوست عزیز، از تماس شما با آراد متشکریم! 🙏
 
 برای دریافت بهترین خدمات، لطفاً از یکی از گزینه‌های زیر استفاده کنید:
 
