@@ -21,8 +21,7 @@ const openai = new OpenAI({
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MINI_APP_URL = process.env.MINI_APP_URL;
-const SUPPORT_USERNAME =
-  process.env.SUPPORT_USERNAME || "araks_support";
+const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || "OFFICE_RAD";
 const ADMIN_TELEGRAM_IDS = process.env.ADMIN_TELEGRAM_IDS
   ? process.env.ADMIN_TELEGRAM_IDS.split(",")
   : []; // مثال: "123456789,987654321"
@@ -729,11 +728,11 @@ if (bot) {
 📞 اطلاعات تماس:
 
 📱 تلگرام: @${SUPPORT_USERNAME}
-📧 ایمیل: info@araksgroup.com
-☎️ تلفن: +374 12 345 6789
+📧 ایمیل: info@radgroup.com
+☎️ تلفن: +374 93 655375
 
 📍 آدرس دفتر:
-Fuchik 32/2, Yerevan, Armenia
+Nikoghayos Tigranyan Street 1st Deadlock, 10, Yerevan, Armenia
 
 🕐 ساعات کاری:
 دوشنبه تا شنبه
@@ -789,7 +788,7 @@ Fuchik 32/2, Yerevan, Armenia
         await bot.answerCallbackQuery(callbackQuery.id);
         await bot.sendMessage(
           chatId,
-          `📞 تماس تلفنی:\n\n+374 12 345 6789\n\nپاسخگویی 24/7\n\nبرای تماس، می‌توانید از تلگرام یا تماس مستقیم استفاده کنید.`,
+          `📞 تماس تلفنی:\n\n+374 93 655375\n\nپاسخگویی 24/7\n\nبرای تماس، می‌توانید از تلگرام یا تماس مستقیم استفاده کنید.`,
         );
         break;
 
@@ -797,7 +796,7 @@ Fuchik 32/2, Yerevan, Armenia
         await bot.answerCallbackQuery(callbackQuery.id);
         await bot.sendMessage(
           chatId,
-          `📧 ایمیل:\n\ninfo@araksgroup.com\n\nپاسخ طی 24 ساعت\n\nلطفاً سوالات خود را به صورت کامل ارسال کنید تا بهترین راهنمایی را دریافت کنید.`,
+          `📧 ایمیل:\n\ninfo@radgroup.com\n\nپاسخ طی 24 ساعت\n\nلطفاً سوالات خود را به صورت کامل ارسال کنید تا بهترین راهنمایی را دریافت کنید.`,
         );
         break;
 
@@ -1045,7 +1044,7 @@ async function processAIResponse(
 - نام: شرکت راد (Rad Group)
 - تخصص اصلی: دریافت کارت اقامت در ارمنستان
 - آدرس دفتر: Fuchik 32/2, Yerevan, Armenia
-- تلگرام پشتیبانی: @araks_support
+- تلگرام پشتیبانی: @OFFICE_RAD
 
 📦 **پکیج‌های اقامتی ما:**
 
@@ -1109,7 +1108,7 @@ async function processAIResponse(
 2. هرگز قیمت‌های دقیق نگو - فقط به لیست پکیج‌ها ارجاع بده: "برای مشاهده قیمت‌ها و جزئیات بیشتر، لطفاً مینی اپ ما را باز کنید 📱"
 3. اگر سوال غیرمرتبط پرسیدند، مودبانه جواب کوتاه بده و بگو: "خوشحال می‌شم که درباره خدمات اقامت و مهاجرت به ارمنستان کمکتان کنم 😊"
 4. از اطلاعات تاریخچه چت استفاده کن و پاسخ‌های شخصی‌سازی شده بده
-5. اگر سوالی خارج از دانش توست، کاربر را به پشتیبانی هدایت کن: "برای اطلاعات دقیق‌تر می‌توانید با تیم پشتیبانی ما در @araks_support تماس بگیرید"
+5. اگر سوالی خارج از دانش توست، کاربر را به پشتیبانی هدایت کن: "برای اطلاعات دقیق‌تر می‌توانید با تیم پشتیبانی ما در @OFFICE_RAD تماس بگیرید"
 6. همیشه مشتاق و آماده کمک باش
 7. از ایموجی استفاده کن تا پیام‌ها دوستانه‌تر باشند (ولی زیاد نکن)
 8. اگر کاربر علاقه‌مند به خرید نشان داد، او را تشویق کن که با پشتیبانی تماس بگیرد یا مینی اپ را باز کند
@@ -1165,7 +1164,7 @@ async function processAIResponse(
       if (user) {
         user.chat.push({
           message:
-            "متاسفم، در حال حاضر مشکلی پیش آمده است. 😔 لطفاً بعداً دوباره تلاش کنید یا با پشتیبانی ما در تلگرام @araks_support تماس بگیرید. 🙏",
+            "متاسفم، در حال حاضر مشکلی پیش آمده است. 😔 لطفاً بعداً دوباره تلاش کنید یا با پشتیبانی ما در تلگرام @OFFICE_RAD تماس بگیرید. 🙏",
           time: new Date(),
           from: "ai",
         });
